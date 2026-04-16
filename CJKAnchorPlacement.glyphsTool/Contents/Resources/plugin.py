@@ -203,27 +203,6 @@ def draw_metrics_rect(font, master, layer, lsb_value, rsb_value, tsb_value, bsb_
         path.setLineDash_count_phase_([path.lineWidth() * 3.0, path.lineWidth() * 3.0], 2, 0.0)
     path.stroke()
 
-def guess_anchor_direction_and_calc_distance_from_edge(location, master, layer, reference_mode=REFERENCE_MODE_BODY):
-    bounds = get_reference_bounds(master, layer, reference_mode)
-    center = get_bounds_center(bounds)
-    delta  = NSPoint(location.x - center.x, location.y - center.y)
-    radians = math.atan2(delta.y, delta.x)
-    anchor_name = None
-    distance_from_edge = None
-    if -(math.pi / 4.0) <= radians <= (math.pi / 4.0):
-        anchor_name = 'RSB'
-        distance_from_edge = calc_anchor_distance(bounds, reference_mode, anchor_name, location)
-    elif  (math.pi / 4.0) <= radians <= (math.pi * (3.0 / 4.0)):
-        anchor_name = 'TSB'
-        distance_from_edge = calc_anchor_distance(bounds, reference_mode, anchor_name, location)
-    elif -(math.pi * (3.0 / 4.0)) <= radians <= -(math.pi / 4.0):
-        anchor_name = 'BSB'
-        distance_from_edge = calc_anchor_distance(bounds, reference_mode, anchor_name, location)
-    else:
-        anchor_name = 'LSB'
-        distance_from_edge = calc_anchor_distance(bounds, reference_mode, anchor_name, location)
-    return anchor_name, distance_from_edge
-
 GSInspectorView = objc.lookUpClass('GSInspectorView')
 class CJKAnchorPlacementInspectorView(GSInspectorView):
     
@@ -312,23 +291,6 @@ class CJKAnchorPlacementTool(SelectTool):
         return Glyphs.defaults['.'.join((type(self).__name__.replace('NSKVONotifying_', ''), 'Hotkey'))] or self.keyboardShortcut
     
     def mouseDoubleDown_(self, event):
-        view = self.editViewController().graphicView()
-        location = view.getActiveLocation_(event)
-        layer = view.activeLayer()
-        if layer:
-            font = layer.parent.parent
-            master = font.masters[layer.associatedMasterId or layer.layerId]
-            anchor_name, distance_from_edge = guess_anchor_direction_and_calc_distance_from_edge(location, master, layer, self.ReferenceMode)
-            if distance_from_edge > 0.0:
-                if anchor_name == 'LSB':
-                    self.LSBValue = distance_from_edge
-                elif anchor_name == 'RSB':
-                    self.RSBValue = distance_from_edge
-                elif anchor_name == 'TSB':
-                    self.TSBValue = distance_from_edge
-                elif anchor_name == 'BSB':
-                    self.BSBValue = distance_from_edge
-                return
         objc.super(CJKAnchorPlacementTool, self).mouseDoubleDown_(event)
     
     @LSBValue.setter
