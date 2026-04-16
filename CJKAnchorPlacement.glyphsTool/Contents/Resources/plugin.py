@@ -5,7 +5,7 @@ from GlyphsApp import *
 from GlyphsApp.plugins import *
 from AppKit import NSApplication, NSGraphicsContext, NSFont, NSColor, NSMakeRect, NSInsetRect, NSMakePoint, NSAlternateKeyMask, NSBeep, NSNumberFormatter, NSValueTransformer, NSLeftMouseDown, NSLeftMouseUp, NSMouseMoved, NSLeftMouseDragged
 
-from Foundation import NSNotFound, NSNumber, NSMutableDictionary
+from Foundation import NSNotFound, NSNumber, NSMutableDictionary, NSNotificationCenter
 import math
 import collections
 import contextlib
@@ -76,9 +76,9 @@ def get_bounds_center(bounds):
         bounds.origin.y + bounds.size.height / 2.0
     )
  
-def arrange_anchors(font, master, layer, reference_mode=REFERENCE_MODE_BODY):
+def arrange_anchors(font, master, layer, reference_mode=REFERENCE_MODE_BODY, reference_bounds=None):
     if layer:
-        reference_bounds = get_reference_bounds(master, layer, reference_mode)
+        reference_bounds = reference_bounds or get_reference_bounds(master, layer, reference_mode)
         center = get_bounds_center(reference_bounds)
         
         lsb_anchor = layer.anchors['LSB'] if layer.anchors else None
@@ -148,9 +148,9 @@ def calc_anchor_distance(reference_bounds, reference_mode, anchor_name, position
             return position.y - min_y
     return None
 
-def apply_values_for_anchors(font, master, layer, lsb_value, rsb_value, tsb_value, bsb_value, reference_mode=REFERENCE_MODE_BODY):
+def apply_values_for_anchors(font, master, layer, lsb_value, rsb_value, tsb_value, bsb_value, reference_mode=REFERENCE_MODE_BODY, reference_bounds=None):
     if layer:
-        reference_bounds = get_reference_bounds(master, layer, reference_mode)
+        reference_bounds = reference_bounds or get_reference_bounds(master, layer, reference_mode)
         if lsb_value is not None:
             upsert_anchor(layer, 'LSB', calc_anchor_position(reference_bounds, reference_mode, 'LSB', lsb_value))
         else:
@@ -180,8 +180,8 @@ def make_magenta_color():
 def make_cyan_color():
     return NSColor.colorWithDeviceRed_green_blue_alpha_(0.0 / 256.0, 159.0 / 256.0, 227.0 / 256.0, 1.0)
 
-def draw_metrics_rect(font, master, layer, lsb_value, rsb_value, tsb_value, bsb_value, reference_mode=REFERENCE_MODE_BODY, scale=1.0, dotted=False):
-    reference_bounds = get_reference_bounds(master, layer, reference_mode)
+def draw_metrics_rect(font, master, layer, lsb_value, rsb_value, tsb_value, bsb_value, reference_mode=REFERENCE_MODE_BODY, reference_bounds=None, scale=1.0, dotted=False):
+    reference_bounds = reference_bounds or get_reference_bounds(master, layer, reference_mode)
     min_x = get_bounds_min_x(reference_bounds)
     max_x = get_bounds_max_x(reference_bounds)
     min_y = get_bounds_min_y(reference_bounds)
@@ -270,7 +270,39 @@ class CJKAnchorPlacementTool(SelectTool):
         self.grid_subdivision = 1.0
         self.last_do_kerning = None
         self.last_do_spacing = None
+        self._bbox_cache = {}
+        self._last_synced_layer_id = None
         self.ReferenceMode = self.normalized_reference_mode(Glyphs.defaults[REFERENCE_MODE_DEFAULTS_KEY])
+
+    @objc.python_method
+    def activate(self):
+        self._bbox_cache = {}
+        self._last_synced_layer_id = None
+        nc = NSNotificationCenter.defaultCenter()
+        nc.addObserver_selector_name_object_(self, 'invalidateBBoxCache:', 'NSUndoManagerDidUndoChangeNotification', None)
+        nc.addObserver_selector_name_object_(self, 'invalidateBBoxCache:', 'NSUndoManagerDidRedoChangeNotification', None)
+
+    @objc.python_method
+    def deactivate(self):
+        NSNotificationCenter.defaultCenter().removeObserver_(self)
+        self._bbox_cache = {}
+        self._last_synced_layer_id = None
+
+    def invalidateBBoxCache_(self, notification):
+        self._bbox_cache = {}
+        self._last_synced_layer_id = None
+
+    @objc.python_method
+    def cached_reference_bounds(self, master, layer):
+        if self.ReferenceMode != REFERENCE_MODE_BBOX:
+            return get_reference_bounds(master, layer, self.ReferenceMode)
+        key = layer.layerId
+        cached = self._bbox_cache.get(key)
+        if cached is not None:
+            return cached
+        bounds = get_reference_bounds(master, layer, self.ReferenceMode)
+        self._bbox_cache[key] = bounds
+        return bounds
     
     @objc.python_method
     def settings(self):
@@ -292,6 +324,21 @@ class CJKAnchorPlacementTool(SelectTool):
     
     def mouseDoubleDown_(self, event):
         objc.super(CJKAnchorPlacementTool, self).mouseDoubleDown_(event)
+
+    def mouseDragged_(self, event):
+        self._bbox_cache = {}
+        self._last_synced_layer_id = None
+        objc.super(CJKAnchorPlacementTool, self).mouseDragged_(event)
+
+    def mouseUp_(self, event):
+        self._bbox_cache = {}
+        self._last_synced_layer_id = None
+        objc.super(CJKAnchorPlacementTool, self).mouseUp_(event)
+
+    def keyDown_(self, event):
+        self._bbox_cache = {}
+        self._last_synced_layer_id = None
+        objc.super(CJKAnchorPlacementTool, self).keyDown_(event)
     
     @LSBValue.setter
     def LSBValue(self, value):
@@ -344,7 +391,8 @@ class CJKAnchorPlacementTool(SelectTool):
         if layer:
             font = layer.parent.parent
             master = font.masters[layer.associatedMasterId or layer.layerId]
-            self.sync_values(font, master, layer)
+            self._bbox_cache = {}
+            self.sync_values(font, master, layer, reference_bounds=self.cached_reference_bounds(master, layer))
 
     @objc.IBAction
     def handleReferenceModeAction_(self, sender):
@@ -367,12 +415,13 @@ class CJKAnchorPlacementTool(SelectTool):
             if layer:
                 font = layer.parent.parent
                 master = font.masters[layer.associatedMasterId or layer.layerId]
-                apply_values_for_anchors(font, master, layer, self.LSBValue, self.RSBValue, self.TSBValue, self.BSBValue, self.ReferenceMode)
+                reference_bounds = self.cached_reference_bounds(master, layer)
+                apply_values_for_anchors(font, master, layer, self.LSBValue, self.RSBValue, self.TSBValue, self.BSBValue, self.ReferenceMode, reference_bounds=reference_bounds)
     
     @objc.python_method
-    def sync_values(self, font, master, layer, needs_round=False):
+    def sync_values(self, font, master, layer, needs_round=False, reference_bounds=None):
         if layer:
-            reference_bounds = get_reference_bounds(master, layer, self.ReferenceMode)
+            reference_bounds = reference_bounds or get_reference_bounds(master, layer, self.ReferenceMode)
             lsb_anchor = layer.anchors['LSB'] if layer.anchors else None
             rsb_anchor = layer.anchors['RSB'] if layer.anchors else None
             tsb_anchor = layer.anchors['TSB'] if layer.anchors else None
@@ -415,10 +464,13 @@ class CJKAnchorPlacementTool(SelectTool):
     def background(self, layer):
         font = layer.parent.parent
         master = font.masters[layer.associatedMasterId or layer.layerId]
-        event = NSApplication.sharedApplication().currentEvent()
-        arrange_anchors(font, master, layer, self.ReferenceMode)
-        self.update_grid_subdivision(event)
-        self.sync_values(font, master, layer, needs_round=event.type() in VALID_EVENT_TYPES if event else False)
+        reference_bounds = self.cached_reference_bounds(master, layer)
+        if self._last_synced_layer_id != layer.layerId:
+            event = NSApplication.sharedApplication().currentEvent()
+            arrange_anchors(font, master, layer, self.ReferenceMode, reference_bounds=reference_bounds)
+            self.update_grid_subdivision(event)
+            self.sync_values(font, master, layer, needs_round=event.type() in VALID_EVENT_TYPES if event else False, reference_bounds=reference_bounds)
+            self._last_synced_layer_id = layer.layerId
         with currentGraphicsContext() as ctx:
             dotted = False
             has_unbalanced_palt = sum((1 if value is None else 0 for value in (self.LSBValue, self.RSBValue))) == 1
@@ -433,7 +485,7 @@ class CJKAnchorPlacementTool(SelectTool):
             else:
                 make_cyan_color().setStroke()
             scale = self.editViewController().graphicView().scale()
-            draw_metrics_rect(font, master, layer, self.LSBValue, self.RSBValue, self.TSBValue, self.BSBValue, reference_mode=self.ReferenceMode, scale=scale, dotted=dotted)
+            draw_metrics_rect(font, master, layer, self.LSBValue, self.RSBValue, self.TSBValue, self.BSBValue, reference_mode=self.ReferenceMode, reference_bounds=reference_bounds, scale=scale, dotted=dotted)
     
     @objc.python_method
     def __file__(self):
