@@ -14,13 +14,30 @@
                 <outlet property="exampleCharacterTextField" destination="roN-Ze-puh" id="0rR-xa-Ge5"/>
                 <outlet property="inspectorDialog" destination="c22-O7-iKe" id="CKH-tl-QMI"/>
                 <outlet property="inspectorDialogView" destination="c22-O7-iKe" id="PzC-P5-UUN"/>
+                <outlet property="referenceModeSegmentedControl" destination="mde-Bx-f3m" id="b5t-UH-Iji"/>
             </connections>
         </customObject>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
         <customView translatesAutoresizingMaskIntoConstraints="NO" id="c22-O7-iKe" customClass="CJKAnchorPlacementInspectorView">
-            <rect key="frame" x="0.0" y="0.0" width="115" height="81"/>
+            <rect key="frame" x="0.0" y="0.0" width="220" height="81"/>
             <subviews>
+                <segmentedControl verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="mde-Bx-f3m">
+                    <rect key="frame" x="112" y="25" width="100" height="30"/>
+                    <constraints>
+                        <constraint firstAttribute="height" constant="28" id="vk6-cS-hcS"/>
+                    </constraints>
+                    <segmentedCell key="cell" controlSize="small" borderStyle="border" alignment="left" style="rounded" trackingMode="selectOne" selectedSegment="0" id="Kgl-Lm-SWy">
+                        <font key="font" metaFont="smallSystem"/>
+                        <segments>
+                            <segment label="Body"/>
+                            <segment label="BBox" tag="1"/>
+                        </segments>
+                    </segmentedCell>
+                    <connections>
+                        <action selector="handleReferenceModeAction:" target="-2" id="dN5-oO-Xgt"/>
+                    </connections>
+                </segmentedControl>
                 <textField focusRingType="none" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="XZP-wI-q1m" customClass="GSSteppingTextField">
                     <rect key="frame" x="8" y="30" width="36" height="14"/>
                     <constraints>
@@ -162,15 +179,18 @@
                 <constraint firstItem="fWD-5F-j8h" firstAttribute="centerY" secondItem="roN-Ze-puh" secondAttribute="centerY" constant="8" id="IlE-cZ-wah"/>
                 <constraint firstItem="pH5-yT-WA1" firstAttribute="bottom" secondItem="roN-Ze-puh" secondAttribute="top" constant="4" id="Ubi-8R-ovH"/>
                 <constraint firstItem="cJB-LX-plY" firstAttribute="top" secondItem="RG0-cs-2bP" secondAttribute="bottom" constant="2" id="Whl-mN-mJA"/>
+                <constraint firstItem="mde-Bx-f3m" firstAttribute="centerY" secondItem="roN-Ze-puh" secondAttribute="centerY" id="Xmu-os-OSF"/>
+                <constraint firstItem="mde-Bx-f3m" firstAttribute="trailing" secondItem="c22-O7-iKe" secondAttribute="trailing" constant="-8" id="XeI-us-FCT"/>
                 <constraint firstItem="kjB-6o-Mhg" firstAttribute="trailing" secondItem="roN-Ze-puh" secondAttribute="centerX" id="YLE-r7-nXh"/>
                 <constraint firstItem="XZP-wI-q1m" firstAttribute="centerY" secondItem="roN-Ze-puh" secondAttribute="centerY" constant="4" id="au3-ec-uw1"/>
                 <constraint firstItem="fWD-5F-j8h" firstAttribute="leading" secondItem="roN-Ze-puh" secondAttribute="trailing" id="fW5-wr-sRy"/>
                 <constraint firstAttribute="height" constant="81" id="gtK-HW-k3j"/>
                 <constraint firstItem="pH5-yT-WA1" firstAttribute="centerX" secondItem="roN-Ze-puh" secondAttribute="centerX" constant="-6" id="hJi-Em-9Jg"/>
+                <constraint firstItem="mde-Bx-f3m" firstAttribute="leading" secondItem="cJB-LX-plY" secondAttribute="trailing" constant="8" id="k9h-7n-9ra"/>
                 <constraint firstItem="rvK-fs-BqX" firstAttribute="centerY" secondItem="roN-Ze-puh" secondAttribute="centerY" constant="-4" id="nSG-LP-Gef"/>
                 <constraint firstItem="sHq-Jr-Dgv" firstAttribute="top" secondItem="roN-Ze-puh" secondAttribute="bottom" constant="-2" id="oRM-Gf-rFi"/>
-                <constraint firstAttribute="width" constant="115" id="rZL-eY-Gm6"/>
-                <constraint firstItem="roN-Ze-puh" firstAttribute="centerX" secondItem="c22-O7-iKe" secondAttribute="centerX" id="yzw-g1-P6G"/>
+                <constraint firstAttribute="width" constant="220" id="rZL-eY-Gm6"/>
+                <constraint firstItem="roN-Ze-puh" firstAttribute="centerX" secondItem="c22-O7-iKe" secondAttribute="leading" constant="57.5" id="yzw-g1-P6G"/>
             </constraints>
             <point key="canvasLocation" x="531.5" y="228.5"/>
         </customView>

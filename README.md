@@ -13,8 +13,13 @@ A Glyphs tool plugin that allows you to edit LSB/RSB/TSB/BSB anchors rather intu
 ## Usage
 
 1. Select the icon on the toolbar to activate the tool.
+2. Choose `Body` or `BBox` in the inspector.
 3. Enter coordinate values directly into the text fields shown at the bottom of the window.
 4. Press up and down arrow keys to increment/decrement values.
+
+`Body` mode keeps the original behavior: positive values place anchors inward from the virtual body edges.
+
+`BBox` mode uses the current layer's bounding box as the reference. Positive values place anchors outward from the bounding box edges, which is useful when setting anchors relative to the actual placed glyph shape.
 
 ###### Toolbar Icon
 
@@ -41,6 +46,10 @@ $ defaults delete com.GeorgSeifert.Glyphs2 CJKAnchorPlacementTool.Hotkey
 ## Requirements
 
 Tested with Glyphs 2.3 on OS X 10.11 and Glyphs 3.1.1 on macOS 10.15.7.
+
+## Modification Notice
+
+This version modifies the original Apache License 2.0-licensed CJKAnchorPlacement.glyphsTool by adding a `Body` / `BBox` reference-mode switch. The `BBox` mode positions LSB/RSB/TSB/BSB anchors by outward distance from the current layer's bounding box, while `Body` mode preserves the original virtual-body behavior.
 
 ## License
 
