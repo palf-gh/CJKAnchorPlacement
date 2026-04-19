@@ -308,7 +308,21 @@ class CJKAnchorPlacementBatchPlugin(ReporterPlugin):
 
     @objc.python_method
     def inactiveLayerBackground(self, layer):
+        # Text tool: show metrics on every glyph in the line; other tools: only
+        # the active (edited) glyph via `background`.
+        if not self._isTextToolActive():
+            return
         self._drawLayer(layer, {'Scale': self.getScale()}, alpha=0.4)
+
+    @objc.python_method
+    def _isTextToolActive(self):
+        try:
+            font = Glyphs.font
+            if font is None:
+                return False
+            return getattr(font, 'tool', None) == 'TextTool'
+        except Exception:
+            return False
 
     @objc.python_method
     def _isActiveReporter(self):
