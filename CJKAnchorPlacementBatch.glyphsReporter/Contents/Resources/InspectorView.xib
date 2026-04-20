@@ -23,7 +23,7 @@
             <rect key="frame" x="0.0" y="0.0" width="168" height="100"/>
             <subviews>
                 <textField verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="XZP-wI-q1m" customClass="GSSteppingTextField">
-                    <rect key="frame" x="8" y="23" width="36" height="14"/>
+                    <rect key="frame" x="11" y="23" width="60" height="14"/>
                     <constraints>
                         <constraint firstAttribute="width" constant="56" id="YGx-NR-XHW"/>
                     </constraints>
@@ -45,7 +45,7 @@
                     </connections>
                 </textField>
                 <textField verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="cJB-LX-plY" customClass="GSSteppingTextField">
-                    <rect key="frame" x="69" y="31" width="36" height="14"/>
+                    <rect key="frame" x="96" y="31" width="60" height="14"/>
                     <constraints>
                         <constraint firstAttribute="width" constant="56" id="lrZ-3n-Okd"/>
                     </constraints>
@@ -67,7 +67,7 @@
                     </connections>
                 </textField>
                 <textField verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="RG0-cs-2bP" customClass="GSSteppingTextField">
-                    <rect key="frame" x="56" y="47" width="36" height="14"/>
+                    <rect key="frame" x="82" y="47" width="60" height="14"/>
                     <constraints>
                         <constraint firstAttribute="width" constant="56" id="ah4-NF-HEh"/>
                     </constraints>
@@ -89,7 +89,7 @@
                     </connections>
                 </textField>
                 <textField verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="kjB-6o-Mhg" customClass="GSSteppingTextField">
-                    <rect key="frame" x="24" y="8" width="36" height="14"/>
+                    <rect key="frame" x="26" y="8" width="60" height="14"/>
                     <constraints>
                         <constraint firstAttribute="width" constant="56" id="x7P-jk-8nt"/>
                     </constraints>
@@ -111,7 +111,7 @@
                     </connections>
                 </textField>
                 <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="roN-Ze-puh">
-                    <rect key="frame" x="44" y="20" width="27" height="28"/>
+                    <rect key="frame" x="71" y="20" width="27" height="28"/>
                     <textFieldCell key="cell" controlSize="small" scrollable="YES" lineBreakMode="clipping" sendsActionOnEndEditing="YES" title="あ" id="E7D-Cm-pCA">
                         <font key="font" metaFont="systemBold" size="24"/>
                         <color key="textColor" name="secondaryLabelColor" catalog="System" colorSpace="catalog"/>
@@ -119,28 +119,28 @@
                     </textFieldCell>
                 </textField>
                 <box horizontalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="pH5-yT-WA1">
-                    <rect key="frame" x="49" y="44" width="5" height="22"/>
+                    <rect key="frame" x="76" y="44" width="5" height="22"/>
                     <constraints>
                         <constraint firstAttribute="height" constant="22" id="CBl-ut-F1L"/>
                         <constraint firstAttribute="width" constant="1" id="RMc-SN-0wM"/>
                     </constraints>
                 </box>
                 <box horizontalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="sHq-Jr-Dgv">
-                    <rect key="frame" x="61" y="0.0" width="5" height="22"/>
+                    <rect key="frame" x="88" y="0.0" width="5" height="22"/>
                     <constraints>
                         <constraint firstAttribute="width" constant="1" id="Jei-H6-2l2"/>
                         <constraint firstAttribute="height" constant="22" id="ryY-7P-1r7"/>
                     </constraints>
                 </box>
                 <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="fWD-5F-j8h">
-                    <rect key="frame" x="69" y="24" width="22" height="5"/>
+                    <rect key="frame" x="96" y="24" width="22" height="5"/>
                     <constraints>
                         <constraint firstAttribute="height" constant="1" id="jk2-Ds-Yvi"/>
                         <constraint firstAttribute="width" constant="22" id="pxO-0e-e7j"/>
                     </constraints>
                 </box>
                 <box verticalHuggingPriority="750" boxType="separator" translatesAutoresizingMaskIntoConstraints="NO" id="rvK-fs-BqX">
-                    <rect key="frame" x="24" y="36" width="22" height="5"/>
+                    <rect key="frame" x="51" y="36" width="22" height="5"/>
                     <constraints>
                         <constraint firstAttribute="width" constant="22" id="3ee-XB-4Z0"/>
                         <constraint firstAttribute="height" constant="1" id="YUR-QH-LyN"/>
