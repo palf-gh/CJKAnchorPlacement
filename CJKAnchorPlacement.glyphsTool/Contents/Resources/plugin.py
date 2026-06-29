@@ -2,10 +2,12 @@
 
 import objc
 from GlyphsApp import *
+from GlyphsApp import Glyphs, GSAnchor
 from GlyphsApp.plugins import *
-from AppKit import NSApplication, NSGraphicsContext, NSFont, NSColor, NSMakeRect, NSInsetRect, NSMakePoint, NSAlternateKeyMask, NSBeep, NSNumberFormatter, NSValueTransformer, NSLeftMouseDown, NSLeftMouseUp, NSMouseMoved, NSLeftMouseDragged
+from GlyphsApp.plugins import SelectTool
+from AppKit import NSApplication, NSGraphicsContext, NSFont, NSColor, NSMakeRect, NSInsetRect, NSMakePoint, NSAlternateKeyMask, NSShiftKeyMask, NSBeep, NSNumberFormatter, NSValueTransformer, NSLeftMouseDown, NSLeftMouseUp, NSMouseMoved, NSLeftMouseDragged, NSAffineTransform, NSBezierPath
 
-from Foundation import NSNotFound, NSNumber, NSMutableDictionary, NSNotificationCenter
+from Foundation import NSNotFound, NSNumber, NSMutableDictionary, NSNotificationCenter, NSPoint, NSScanner
 import math
 import collections
 import contextlib
@@ -48,12 +50,164 @@ def is_valid_bounds(bounds):
     except Exception:
         return False
 
+def glyph_script_tag(glyph):
+    if glyph is None:
+        return ''
+    try:
+        tag = glyph.script
+    except Exception:
+        tag = None
+    if tag is None:
+        return ''
+    return str(tag).strip().lower()
+
+def scripts_match_for_italic_cp(param_script, glyph_script):
+    ps = (param_script or '').strip().lower()
+    gs = (glyph_script or '').strip().lower()
+    if not ps or not gs:
+        return False
+    if ps == gs:
+        return True
+    groups = (
+        frozenset(('latin', 'latn')),
+        frozenset(('kana', 'jpan', 'japanese')),
+        frozenset(('hani', 'hans', 'hant')),
+    )
+    for group in groups:
+        if ps in group and gs in group:
+            return True
+    return False
+
+def iter_custom_parameter_values_named(source, name):
+    if source is None:
+        return
+    cps = getattr(source, 'customParameters', None)
+    if not cps:
+        return
+    for parameter in cps:
+        parameter_name = getattr(parameter, 'name', None)
+        if parameter_name is None and hasattr(parameter, 'key'):
+            try:
+                parameter_name = parameter.key()
+            except Exception:
+                parameter_name = None
+        if parameter_name != name:
+            continue
+        yield getattr(parameter, 'value', None)
+
+def get_italic_angle(master, layer):
+    if master is None:
+        return 0.0
+    try:
+        angle = master.italicAngleForLayer_(layer)
+        if angle is not None:
+            return float(angle)
+    except Exception:
+        pass
+    glyph = layer.parent if layer else None
+    font = glyph.parent if glyph and getattr(glyph, 'parent', None) else None
+    glyph_script = glyph_script_tag(glyph)
+    for source in (master, font):
+        for raw in iter_custom_parameter_values_named(source, 'italicAngle'):
+            text = str(raw).strip()
+            if ':' not in text:
+                continue
+            script, rest = text.split(':', 1)
+            try:
+                angle = float(rest.strip())
+            except (TypeError, ValueError):
+                continue
+            if scripts_match_for_italic_cp(script, glyph_script):
+                return angle
+    for source in (master, font):
+        for raw in iter_custom_parameter_values_named(source, 'italicAngle'):
+            text = str(raw).strip()
+            if ':' in text:
+                continue
+            try:
+                return float(text)
+            except (TypeError, ValueError):
+                continue
+    return float(getattr(master, 'italicAngle', 0.0) or 0.0)
+
+def get_shear_pivot(master, layer):
+    if master is None:
+        return 0.0
+    try:
+        value = master.slantHeightForLayer_(layer)
+        if value is not None:
+            return float(value)
+    except Exception:
+        pass
+    x_height = getattr(master, 'xHeight', None)
+    return float(x_height) * 0.5 if x_height else 0.0
+
+def get_shear_params(master, layer):
+    angle = get_italic_angle(master, layer)
+    return math.tan(math.radians(angle)), get_shear_pivot(master, layer)
+
+def shear_point(point, tan_shear, pivot_y):
+    if abs(tan_shear) < 1e-12:
+        return NSPoint(point.x, point.y)
+    return NSPoint(point.x + tan_shear * (point.y - pivot_y), point.y)
+
+def unshear_point(point, tan_shear, pivot_y):
+    if abs(tan_shear) < 1e-12:
+        return NSPoint(point.x, point.y)
+    return NSPoint(point.x - tan_shear * (point.y - pivot_y), point.y)
+
+def make_shear_transform(tan_shear, pivot_y):
+    transform = NSAffineTransform.transform()
+    transform.setTransformStruct_((1.0, 0.0, tan_shear, 1.0, -tan_shear * pivot_y, 0.0))
+    return transform
+
+def get_layer_bounds(layer):
+    return layer.bounds() if callable(layer.bounds) else layer.bounds
+
+def get_path_bounds(path):
+    return path.bounds() if callable(path.bounds) else path.bounds
+
+def copy_layer_bezier_path(layer):
+    for attr_name in ('completeBezierPath', 'bezierPath'):
+        try:
+            path = getattr(layer, attr_name, None)
+            path = path() if callable(path) else path
+            if path is None:
+                continue
+            try:
+                return path.copy()
+            except Exception:
+                return path.mutableCopy()
+        except Exception:
+            continue
+    return None
+
+def get_deslanted_bounds(layer, tan_shear, pivot_y):
+    if abs(tan_shear) < 1e-12:
+        return get_layer_bounds(layer)
+    try:
+        path = copy_layer_bezier_path(layer)
+        if path is not None:
+            path.transformUsingAffineTransform_(make_shear_transform(-tan_shear, pivot_y))
+            bounds = get_path_bounds(path)
+            if is_valid_bounds(bounds):
+                return bounds
+    except Exception:
+        pass
+    try:
+        copied_layer = layer.copyDecomposedLayer()
+        copied_layer.applyTransform_([1.0, 0.0, -tan_shear, 1.0, tan_shear * pivot_y, 0.0])
+        return get_layer_bounds(copied_layer)
+    except Exception:
+        return get_layer_bounds(layer)
+
 def get_reference_bounds(master, layer, reference_mode=REFERENCE_MODE_BODY):
     body_bounds = get_virtual_body_bounds(master, layer)
     if reference_mode != REFERENCE_MODE_BBOX:
         return body_bounds
     try:
-        bounds = layer.bounds() if callable(layer.bounds) else layer.bounds
+        tan_shear, pivot_y = get_shear_params(master, layer)
+        bounds = get_deslanted_bounds(layer, tan_shear, pivot_y)
     except Exception:
         bounds = None
     return bounds if is_valid_bounds(bounds) else body_bounds
@@ -80,6 +234,7 @@ def arrange_anchors(font, master, layer, reference_mode=REFERENCE_MODE_BODY, ref
     if layer:
         reference_bounds = reference_bounds or get_reference_bounds(master, layer, reference_mode)
         center = get_bounds_center(reference_bounds)
+        tan_shear, pivot_y = get_shear_params(master, layer)
         
         lsb_anchor = layer.anchors['LSB'] if layer.anchors else None
         rsb_anchor = layer.anchors['RSB'] if layer.anchors else None
@@ -88,12 +243,14 @@ def arrange_anchors(font, master, layer, reference_mode=REFERENCE_MODE_BODY, ref
         
         for anchor in [lsb_anchor, rsb_anchor]:
             if anchor:
-                position = NSPoint(anchor.position.x, center.y)
+                upright = unshear_point(anchor.position, tan_shear, pivot_y)
+                position = shear_point(NSPoint(upright.x, center.y), tan_shear, pivot_y)
                 if position != anchor.position:
                     anchor.position = position
         for anchor in [tsb_anchor, bsb_anchor]:
             if anchor:
-                position = NSPoint(center.x, anchor.position.y)
+                upright = unshear_point(anchor.position, tan_shear, pivot_y)
+                position = shear_point(NSPoint(center.x, upright.y), tan_shear, pivot_y)
                 if position != anchor.position:
                     anchor.position = position
 
@@ -151,20 +308,21 @@ def calc_anchor_distance(reference_bounds, reference_mode, anchor_name, position
 def apply_values_for_anchors(font, master, layer, lsb_value, rsb_value, tsb_value, bsb_value, reference_mode=REFERENCE_MODE_BODY, reference_bounds=None):
     if layer:
         reference_bounds = reference_bounds or get_reference_bounds(master, layer, reference_mode)
+        tan_shear, pivot_y = get_shear_params(master, layer)
         if lsb_value is not None:
-            upsert_anchor(layer, 'LSB', calc_anchor_position(reference_bounds, reference_mode, 'LSB', lsb_value))
+            upsert_anchor(layer, 'LSB', shear_point(calc_anchor_position(reference_bounds, reference_mode, 'LSB', lsb_value), tan_shear, pivot_y))
         else:
             delete_anchor(font, master, layer, 'LSB')   
         if rsb_value is not None:
-            upsert_anchor(layer, 'RSB', calc_anchor_position(reference_bounds, reference_mode, 'RSB', rsb_value))
+            upsert_anchor(layer, 'RSB', shear_point(calc_anchor_position(reference_bounds, reference_mode, 'RSB', rsb_value), tan_shear, pivot_y))
         else:
             delete_anchor(font, master, layer, 'RSB')
         if tsb_value is not None:
-            upsert_anchor(layer, 'TSB', calc_anchor_position(reference_bounds, reference_mode, 'TSB', tsb_value))
+            upsert_anchor(layer, 'TSB', shear_point(calc_anchor_position(reference_bounds, reference_mode, 'TSB', tsb_value), tan_shear, pivot_y))
         else:
             delete_anchor(font, master, layer, 'TSB')
         if bsb_value is not None:
-            upsert_anchor(layer, 'BSB', calc_anchor_position(reference_bounds, reference_mode, 'BSB', bsb_value))
+            upsert_anchor(layer, 'BSB', shear_point(calc_anchor_position(reference_bounds, reference_mode, 'BSB', bsb_value), tan_shear, pivot_y))
         else:
             delete_anchor(font, master, layer, 'BSB')
 
@@ -182,6 +340,7 @@ def make_cyan_color():
 
 def draw_metrics_rect(font, master, layer, lsb_value, rsb_value, tsb_value, bsb_value, reference_mode=REFERENCE_MODE_BODY, reference_bounds=None, scale=1.0, dotted=False):
     reference_bounds = reference_bounds or get_reference_bounds(master, layer, reference_mode)
+    tan_shear, pivot_y = get_shear_params(master, layer)
     min_x = get_bounds_min_x(reference_bounds)
     max_x = get_bounds_max_x(reference_bounds)
     min_y = get_bounds_min_y(reference_bounds)
@@ -201,6 +360,8 @@ def draw_metrics_rect(font, master, layer, lsb_value, rsb_value, tsb_value, bsb_
     path.setLineWidth_(1.0 / scale)
     if dotted:
         path.setLineDash_count_phase_([path.lineWidth() * 3.0, path.lineWidth() * 3.0], 2, 0.0)
+    if abs(tan_shear) >= 1e-12:
+        path.transformUsingAffineTransform_(make_shear_transform(tan_shear, pivot_y))
     path.stroke()
 
 GSInspectorView = objc.lookUpClass('GSInspectorView')
@@ -296,7 +457,7 @@ class CJKAnchorPlacementTool(SelectTool):
     def cached_reference_bounds(self, master, layer):
         if self.ReferenceMode != REFERENCE_MODE_BBOX:
             return get_reference_bounds(master, layer, self.ReferenceMode)
-        key = layer.layerId
+        key = id(layer)
         cached = self._bbox_cache.get(key)
         if cached is not None:
             return cached
@@ -422,25 +583,30 @@ class CJKAnchorPlacementTool(SelectTool):
     def sync_values(self, font, master, layer, needs_round=False, reference_bounds=None):
         if layer:
             reference_bounds = reference_bounds or get_reference_bounds(master, layer, self.ReferenceMode)
+            tan_shear, pivot_y = get_shear_params(master, layer)
             lsb_anchor = layer.anchors['LSB'] if layer.anchors else None
             rsb_anchor = layer.anchors['RSB'] if layer.anchors else None
             tsb_anchor = layer.anchors['TSB'] if layer.anchors else None
             bsb_anchor = layer.anchors['BSB'] if layer.anchors else None
             self.needs_disable_update_anchors = True
             if lsb_anchor:
-                self.LSBValue = round_to_grid(calc_anchor_distance(reference_bounds, self.ReferenceMode, 'LSB', lsb_anchor.position), self.grid_subdivision if needs_round else None)
+                position = unshear_point(lsb_anchor.position, tan_shear, pivot_y)
+                self.LSBValue = round_to_grid(calc_anchor_distance(reference_bounds, self.ReferenceMode, 'LSB', position), self.grid_subdivision if needs_round else None)
             else:
                 self.LSBValue = None
             if rsb_anchor:
-                self.RSBValue = round_to_grid(calc_anchor_distance(reference_bounds, self.ReferenceMode, 'RSB', rsb_anchor.position), self.grid_subdivision if needs_round else None)
+                position = unshear_point(rsb_anchor.position, tan_shear, pivot_y)
+                self.RSBValue = round_to_grid(calc_anchor_distance(reference_bounds, self.ReferenceMode, 'RSB', position), self.grid_subdivision if needs_round else None)
             else:
                 self.RSBValue = None
             if tsb_anchor and master:
-                self.TSBValue = round_to_grid(calc_anchor_distance(reference_bounds, self.ReferenceMode, 'TSB', tsb_anchor.position), self.grid_subdivision if needs_round else None)
+                position = unshear_point(tsb_anchor.position, tan_shear, pivot_y)
+                self.TSBValue = round_to_grid(calc_anchor_distance(reference_bounds, self.ReferenceMode, 'TSB', position), self.grid_subdivision if needs_round else None)
             else:
                 self.TSBValue = None
             if bsb_anchor and master:
-                self.BSBValue = round_to_grid(calc_anchor_distance(reference_bounds, self.ReferenceMode, 'BSB', bsb_anchor.position), self.grid_subdivision if needs_round else None)
+                position = unshear_point(bsb_anchor.position, tan_shear, pivot_y)
+                self.BSBValue = round_to_grid(calc_anchor_distance(reference_bounds, self.ReferenceMode, 'BSB', position), self.grid_subdivision if needs_round else None)
             else:
                 self.BSBValue = None
             self.needs_disable_update_anchors = False
@@ -465,12 +631,12 @@ class CJKAnchorPlacementTool(SelectTool):
         font = layer.parent.parent
         master = font.masters[layer.associatedMasterId or layer.layerId]
         reference_bounds = self.cached_reference_bounds(master, layer)
-        if self._last_synced_layer_id != layer.layerId:
+        if self._last_synced_layer_id != id(layer):
             event = NSApplication.sharedApplication().currentEvent()
             arrange_anchors(font, master, layer, self.ReferenceMode, reference_bounds=reference_bounds)
             self.update_grid_subdivision(event)
             self.sync_values(font, master, layer, needs_round=event.type() in VALID_EVENT_TYPES if event else False, reference_bounds=reference_bounds)
-            self._last_synced_layer_id = layer.layerId
+            self._last_synced_layer_id = id(layer)
         with currentGraphicsContext() as ctx:
             dotted = False
             has_unbalanced_palt = sum((1 if value is None else 0 for value in (self.LSBValue, self.RSBValue))) == 1
